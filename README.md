@@ -11,6 +11,8 @@ Voice in, voice out, controls Home Assistant, no cloud.**
 
 ![GenieClaw](doc/assets/genie-claw.png)
 
+[![Scripts CI](https://github.com/GeniePod/genie-claw/actions/workflows/scripts.yml/badge.svg)](https://github.com/GeniePod/genie-claw/actions/workflows/scripts.yml)
+
 > **Status:** `v1.0.0-alpha.4`. The voice loop, the Home Assistant integration,
 > and the safety/audit surfaces are working end-to-end on Jetson Orin Nano Super
 > 8 GB (see [`CHANGELOG.md`](CHANGELOG.md) for the alpha.5 verified-deploy notes
@@ -260,6 +262,37 @@ curl -s http://127.0.0.1:3000/api/web-search \
 
 The direct endpoint returns both a rendered `response` string and structured
 `items`, along with `provider`, `cached`, `blocked`, and `result_count` fields.
+
+## Continuous Integration
+
+CI runs in GitHub Actions on every pull request and every push to `main`. The
+current pipeline is defined in [`.github/workflows/scripts.yml`](.github/workflows/scripts.yml)
+and covers the deploy-script surface, which is the most likely place for a
+silent regression to slip in:
+
+| Job | What it checks | Triggers |
+|-----|----------------|----------|
+| `shellcheck` | All tracked `.sh` files (severity ≥ warning). Catches quoting, unset variables, and POSIX-portability bugs in `deploy/setup-jetson.sh`, `deploy/scripts/*.sh`, and the audio helper scripts. | Push or PR that touches any `*.sh` file or the workflow itself. |
+| `ruff` | All tracked `.py` files against the workspace's `ruff.toml` (Python 3.10 target, line length 100, `E402` allowed for the wakeword scripts that have to suppress ALSA stderr before importing pyaudio). | Push or PR that touches any `*.py` file or the workflow itself. |
+
+Both jobs are path-filtered, so PRs that touch only Rust code skip the
+scripts run entirely. Each job has a 5-minute timeout and is gated by a
+`concurrency` group so re-pushing a branch cancels the previous run.
+
+To reproduce locally before pushing:
+
+```bash
+# Shell scripts
+shellcheck --severity=warning $(git ls-files '*.sh')
+
+# Python helper scripts
+ruff check $(git ls-files '*.py')
+```
+
+Larger Rust-side CI (workspace `cargo fmt` + `clippy` + `test`, aarch64
+cross-compile via `make jetson`, `cargo audit` / `cargo deny`) is tracked in
+[issue #34](https://github.com/GeniePod/genie-claw/issues/34) and will land as
+follow-up PRs.
 
 ## Documentation
 
